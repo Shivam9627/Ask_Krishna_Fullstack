@@ -1,0 +1,25 @@
+{
+  "short_name": "ASK KRISHNA",
+  "name": "ASK KRISHNA - Bhagavad Gita Assistant",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "logo3.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "logo3.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#000000",
+  "background_color": "#ffffff"
+}
