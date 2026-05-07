@@ -31,6 +31,7 @@ const Chat = () => {
   const [ttsPitch, setTtsPitch] = useState(parseFloat(localStorage.getItem('ttsPitch') || '1'));
   const [autoSpeak, setAutoSpeak] = useState(localStorage.getItem('autoSpeak') === 'true');
   const [showVoiceControls, setShowVoiceControls] = useState(false);
+  const [hindiVoiceGender, setHindiVoiceGender] = useState(localStorage.getItem('hindiVoiceGender') || 'female');
 
   // Check if user is authenticated
   useEffect(() => {
@@ -50,22 +51,66 @@ const Chat = () => {
     localStorage.setItem('chatLanguage', language);
   }, [language]);
 
-  // Load available TTS voices
+  // Load available TTS voices with better Hindi detection by gender
   useEffect(() => {
     const loadVoices = () => {
       const v = window.speechSynthesis?.getVoices?.() || [];
       setVoices(v);
-      // If no selection yet, try default by language
-      if (!selectedVoice && v.length) {
-        const byLang = v.find(voice => language === 'hindi' ? voice.lang === 'hi-IN' : voice.lang.startsWith('en'));
-        if (byLang) setSelectedVoice(byLang.name);
+      
+      if (language === 'hindi') {
+        // Try to find Hindi voice based on gender preference
+        let hindiVoice = findHindiVoiceByGender(v, hindiVoiceGender);
+        
+        if (hindiVoice) {
+          setSelectedVoice(hindiVoice.name);
+        } else {
+          // Fallback: try to find any Hindi voice
+          hindiVoice = findHindiVoiceByGender(v, 'any');
+          if (hindiVoice) {
+            setSelectedVoice(hindiVoice.name);
+          }
+        }
       }
     };
+    
     loadVoices();
     if (typeof window !== 'undefined' && window.speechSynthesis) {
       window.speechSynthesis.onvoiceschanged = loadVoices;
     }
-  }, [language, selectedVoice]);
+  }, [language, hindiVoiceGender]);
+
+  // Helper function to find Hindi voice by gender
+  const findHindiVoiceByGender = (voiceList, gender) => {
+    // Filter Hindi voices
+    const hindiVoices = voiceList.filter(v => 
+      v.lang === 'hi-IN' || 
+      v.lang === 'hi' || 
+      v.lang?.startsWith('hi') || 
+      v.name?.toLowerCase()?.includes('hindi')
+    );
+
+    if (hindiVoices.length === 0) return null;
+
+    if (gender === 'any') {
+      return hindiVoices[0];
+    }
+
+    // Try to find voice by gender (Google Chrome, Edge, etc.)
+    const genderVoice = hindiVoices.find(v => {
+      const nameL = v.name?.toLowerCase() || '';
+      if (gender === 'female') {
+        return nameL.includes('female') || nameL.includes('woman') || nameL.includes('girl');
+      } else if (gender === 'male') {
+        return nameL.includes('male') || nameL.includes('man') || nameL.includes('boy');
+      }
+      return false;
+    });
+
+    if (genderVoice) return genderVoice;
+
+    // Fallback: return first available Hindi voice
+    return hindiVoices[0];
+  };
 
   // Persist TTS prefs
   useEffect(() => {
@@ -80,6 +125,9 @@ const Chat = () => {
   useEffect(() => {
     localStorage.setItem('autoSpeak', String(autoSpeak));
   }, [autoSpeak]);
+  useEffect(() => {
+    localStorage.setItem('hindiVoiceGender', hindiVoiceGender);
+  }, [hindiVoiceGender]);
 
   // Scroll to bottom of messages
   const scrollToBottom = () => {
@@ -141,7 +189,7 @@ const Chat = () => {
     }
   }, [location.search, currentUser]);
 
-  // Enhanced speech synthesis with play/pause and Hindi support + smoother controls
+  // Enhanced speech synthesis with play/pause and improved Hindi support
   const handlePlayPause = (text, idx, lang) => {
     if (playingIdx === idx && !isPaused) {
       window.speechSynthesis.pause();
@@ -153,13 +201,23 @@ const Chat = () => {
       window.speechSynthesis.cancel();
       const utterance = new window.SpeechSynthesisUtterance(text);
       const allVoices = window.speechSynthesis.getVoices();
-      // Resolve preferred voice
-      let voiceToUse = allVoices.find(v => v.name === selectedVoice);
-      if (!voiceToUse) {
-        voiceToUse = allVoices.find(v => lang === 'hindi' ? v.lang === 'hi-IN' : v.lang.startsWith('en'));
+      
+      // Find the right voice based on language and gender preference
+      let voiceToUse = null;
+      
+      if (lang === 'hindi') {
+        voiceToUse = findHindiVoiceByGender(allVoices, hindiVoiceGender);
+      } else {
+        // English voice
+        voiceToUse = allVoices.find(v => v.lang === 'en-US' || v.lang === 'en-GB' || v.lang?.startsWith('en'));
+        if (!voiceToUse) {
+          voiceToUse = allVoices.find(v => v.lang?.startsWith('en'));
+        }
       }
+      
       if (voiceToUse) utterance.voice = voiceToUse;
-      utterance.lang = lang === 'hindi' ? 'hi-IN' : (voiceToUse?.lang || 'en-US');
+      utterance.lang = lang === 'hindi' ? 'hi-IN' : 'en-US';
+      
       // Apply smoother parameters
       utterance.rate = Math.max(0.6, Math.min(1.4, ttsRate));
       utterance.pitch = Math.max(0.5, Math.min(1.8, ttsPitch));
@@ -174,16 +232,26 @@ const Chat = () => {
     }
   };
 
-  const speakAssistant = (text) => {
-    // Speak without play/pause UI index
+  const speakAssistant = (text, lang = language) => {
+    // Speak without play/pause UI index - respects current language setting and gender preference
     const utterance = new window.SpeechSynthesisUtterance(text);
     const allVoices = window.speechSynthesis.getVoices();
-    let voiceToUse = allVoices.find(v => v.name === selectedVoice);
-    if (!voiceToUse) {
-      voiceToUse = allVoices.find(v => language === 'hindi' ? v.lang === 'hi-IN' : v.lang.startsWith('en'));
+    
+    // Find the right voice based on language and gender preference
+    let voiceToUse = null;
+    
+    if (lang === 'hindi') {
+      voiceToUse = findHindiVoiceByGender(allVoices, hindiVoiceGender);
+    } else {
+      // English voice
+      voiceToUse = allVoices.find(v => v.lang === 'en-US' || v.lang === 'en-GB' || v.lang?.startsWith('en'));
+      if (!voiceToUse) {
+        voiceToUse = allVoices.find(v => v.lang?.startsWith('en'));
+      }
     }
+    
     if (voiceToUse) utterance.voice = voiceToUse;
-    utterance.lang = language === 'hindi' ? 'hi-IN' : (voiceToUse?.lang || 'en-US');
+    utterance.lang = lang === 'hindi' ? 'hi-IN' : 'en-US';
     utterance.rate = Math.max(0.6, Math.min(1.4, ttsRate));
     utterance.pitch = Math.max(0.5, Math.min(1.8, ttsPitch));
     utterance.volume = 1;
@@ -268,7 +336,7 @@ const Chat = () => {
 
       setMessages(prevMessages => [...prevMessages, assistantMessage]);
       if (autoSpeak && typeof window !== 'undefined' && window.speechSynthesis) {
-        speakAssistant(responseContent);
+        speakAssistant(responseContent, language);
       }
     } catch (error) {
       console.error('Error sending message:', error);
@@ -384,7 +452,7 @@ const Chat = () => {
                     {/* Play button for assistant messages */}
                     {!isUser && (
                       <button
-                        className="listen-btn"
+                        className={`listen-btn ${playingIdx === idx ? 'playing' : ''}`}
                         title={
                           playingIdx === idx
                             ? isPaused
@@ -393,20 +461,6 @@ const Chat = () => {
                             : 'Play'
                         }
                         onClick={() => handlePlayPause(msg.content, idx, language)}
-                        style={{
-                          marginRight: '10px',
-                          cursor: 'pointer',
-                          fontSize: '1.5em',
-                          background: playingIdx === idx ? '#e0f7fa' : '#f0f0f0',
-                          border: 'none',
-                          borderRadius: '50%',
-                          width: '40px',
-                          height: '40px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
-                        }}
                       >
                         {playingIdx === idx ? (
                           isPaused ? <FaPlay /> : <FaPause />
@@ -417,17 +471,6 @@ const Chat = () => {
                     )}
                     <div
                       className={`message-bubble ${isUser ? 'user-bubble' : 'assistant-bubble'}`}
-                      style={{
-                        maxWidth: '70%',
-                        padding: '12px 18px',
-                        borderRadius: isUser ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-                        background: isUser ? '#1976d2' : '#f5f5f5',
-                        color: isUser ? '#fff' : '#222',
-                        boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-                        marginLeft: isUser ? 'auto' : '0',
-                        marginRight: isUser ? '0' : 'auto',
-                        position: 'relative',
-                      }}
                     >
                       <ReactMarkdown>{msg.content}</ReactMarkdown>
                     </div>
@@ -449,12 +492,28 @@ const Chat = () => {
       )}
       {showVoiceControls && (
         <div className="voice-controls">
+          {language === 'hindi' && (
+            <div className="control">
+              <label>Hindi Voice
+                <select value={hindiVoiceGender} onChange={e => setHindiVoiceGender(e.target.value)}>
+                  <option value="female">👩 Female (Girl)</option>
+                  <option value="male">👨 Male (Boy)</option>
+                </select>
+              </label>
+            </div>
+          )}
           <div className="control">
             <label>Voice
               <select value={selectedVoice} onChange={e => setSelectedVoice(e.target.value)}>
                 <option value="">System default</option>
                 {voices
-                  .filter(v => language === 'hindi' ? v.lang === 'hi-IN' : v.lang.startsWith('en'))
+                  .filter(v => {
+                    if (language === 'hindi') {
+                      return v.lang === 'hi-IN' || v.lang === 'hi' || v.lang?.startsWith('hi') || v.name?.toLowerCase()?.includes('hindi');
+                    } else {
+                      return v.lang === 'en-US' || v.lang === 'en-GB' || v.lang?.startsWith('en');
+                    }
+                  })
                   .map(v => (
                     <option key={`${v.name}-${v.lang}`} value={v.name}>{v.name} ({v.lang})</option>
                   ))}

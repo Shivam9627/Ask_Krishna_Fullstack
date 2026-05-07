@@ -1,9 +1,14 @@
 import axios from 'axios';
 
-// Create an axios instance with default config
-// Use relative paths when proxy is configured in package.json
+// Dev: CRA proxy (package.json "proxy") forwards /api to the backend.
+// Production: set REACT_APP_API_URL to your deployed API (no trailing slash), e.g. https://your-api.vercel.app
+const apiBase =
+  process.env.NODE_ENV === 'production'
+    ? (process.env.REACT_APP_API_URL || '').replace(/\/$/, '')
+    : '';
+
 const api = axios.create({
-  baseURL: process.env.NODE_ENV === 'production' ? '' : '',
+  baseURL: apiBase,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -119,7 +124,7 @@ const authService = {
   // Login a user
   login: async (email, password) => {
     try {
-      console.log("🔍 Attempting login with:", { email, password });
+      console.log('🔍 Attempting login for:', email);
       const response = await api.post('/api/auth/login', { email, password });
       console.log("✅ Login response:", response.data);
       if (response.data && response.data.token) {

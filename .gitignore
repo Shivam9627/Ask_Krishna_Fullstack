@@ -1,2 +1,12 @@
 .env
+*.env
+!*.env.example
+node_modules
+package-lock.json
+build
+backend/.env.example
+frontend/.env.example
+backend/.env.example
+.env
+
 * .env
